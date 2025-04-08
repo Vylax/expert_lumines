@@ -17,36 +17,91 @@ Okay, here's an in-depth explanation of the steps to implement your RAG system u
 **Step 1: Project Setup & Authentication**
 
 1.  **Create Environment:** Set up a Python virtual environment (`python -m venv .venv`, `source .venv/bin/activate`).
-2.  **Install Libraries:**
+2.  **Install Libraries:** Ensure all required libraries specified in `requirements.txt` are installed. These include:
+    *   `langchain`
+    *   `langchain-google-vertexai`
+    *   `langchain-community`
+    *   `langchain-text-splitters`
+    *   `langchain-chroma`
+    *   `regex`
+    *   `beautifulsoup4`
+    *   `lxml`
+    *   `python-dotenv`
+
+    Install them using:
     ```bash
-    pip install langchain langchain-google-vertexai langchain-community langchain-text-splitters langchain-chroma regex beautifulsoup4 lxml
+    pip install -r requirements.txt
     ```
 3.  **Google Cloud Auth:** Authenticate your environment so LangChain can use Vertex AI. The easiest way for local development is usually:
     ```bash
     gcloud auth application-default login
     ```
-4.  **Set Project ID:** Ensure LangChain knows your Google Cloud Project ID. You can set it as an environment variable:
-    ```bash
-    export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
-    # Or set it within your Python script using os.environ
+4.  **Set Project ID:** Ensure LangChain knows your Google Cloud Project ID. Add it to your `.env` file in the project root:
+    ```dotenv
+    # .env file
+    GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
     ```
+    Your Python code (likely in `src/config.py`, see below) should then use `python-dotenv` to load this variable.
+
+#### Centralized Configuration (`src/config.py`)
+
+It's best practice to keep configuration variables (like paths, model names, chunking parameters) separate from your main logic. We'll use `src/config.py` for this.
+
+*Example `src/config.py` structure:*
+```python
+# src/config.py
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (especially for secrets)
+load_dotenv()
+
+# --- Paths ---
+# !! IMPORTANT: Update this path to your actual Obsidian vault location !!
+OBSIDIAN_VAULT_PATH = "/path/to/your/obsidian/vault"
+VECTORSTORE_PATH = "./data/chroma_db_obsidian"      # Relative to project root
+
+# --- Model Names ---
+# Check Vertex AI documentation for recommended model versions
+EMBEDDING_MODEL_NAME = "text-embedding-004"
+LLM_MODEL_NAME = "gemini-1.0-pro"
+
+# --- Data Processing ---
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 150
+
+# --- Retriever ---
+RETRIEVER_K = 5 # Number of chunks to retrieve
+
+# --- Secrets / Environment Variables ---
+GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
+
+# --- Sanity Checks (Optional but Recommended) ---
+if not GOOGLE_CLOUD_PROJECT:
+    print("Warning: GOOGLE_CLOUD_PROJECT environment variable not set in .env file.")
+
+if not os.path.isdir(OBSIDIAN_VAULT_PATH):
+    print(f"Warning: OBSIDIAN_VAULT_PATH does not exist or is not a directory: {OBSIDIAN_VAULT_PATH}")
+    # Consider raising an error here depending on your application's needs
+```
 
 **Step 2: Load Markdown Documents**
 
-1.  Use `DirectoryLoader` to load all `.md` files from your Obsidian vault path. `UnstructuredMarkdownLoader` is a reasonable choice for parsing Markdown content.
+1.  Use `DirectoryLoader` to load all `.md` files from the `OBSIDIAN_VAULT_PATH` specified in `src/config.py`. `UnstructuredMarkdownLoader` is a reasonable choice for parsing Markdown content.
 
+    *This code belongs in `src/data_processing.py`. It imports necessary values from `src/config.py`.*
     ```python
     import os
     from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
-    import regex as re # Use 'regex' for potentially better unicode handling
+    import regex as re
+    from src import config # Import the config module
 
-    # --- Configuration ---
-    OBSIDIAN_VAULT_PATH = "/path/to/your/obsidian/vault"
-    # Make sure this path is correct!
+    # --- Load documents using path from config ---
+    print(f"Loading documents from: {config.OBSIDIAN_VAULT_PATH}")
+    # Optional: Rely on the check within config.py
 
-    print(f"Loading documents from: {OBSIDIAN_VAULT_PATH}")
     loader = DirectoryLoader(
-        OBSIDIAN_VAULT_PATH,
+        config.OBSIDIAN_VAULT_PATH,
         glob="**/*.md",         # Load only markdown files recursively
         loader_cls=UnstructuredMarkdownLoader,
         show_progress=True,
@@ -60,7 +115,10 @@ Okay, here's an in-depth explanation of the steps to implement your RAG system u
 
 1.  Iterate through the loaded documents (`docs_raw`) to add your custom metadata (relative file path and extracted links).
 
+    *The `extract_obsidian_links` function and the loop belong in `src/data_processing.py`. Import `config` if not already done in this file.*
     ```python
+    # Ensure 'from src import config' is present earlier in the file
+    
     def extract_obsidian_links(text):
         """Finds all Obsidian-style [[wikilinks]] in the text."""
         # Basic regex: [[any characters not closing brackets]]
@@ -75,8 +133,10 @@ Okay, here's an in-depth explanation of the steps to implement your RAG system u
     for doc in docs_raw:
         # Create relative path from vault root for cleaner metadata
         full_path = doc.metadata.get('source', '')
-        if OBSIDIAN_VAULT_PATH in full_path:
-             relative_path = os.path.relpath(full_path, OBSIDIAN_VAULT_PATH)
+        # Use the config path for correct relative path calculation
+        # Add a check for config.OBSIDIAN_VAULT_PATH to avoid errors if it's None/empty
+        if config.OBSIDIAN_VAULT_PATH and config.OBSIDIAN_VAULT_PATH in full_path:
+             relative_path = os.path.relpath(full_path, config.OBSIDIAN_VAULT_PATH)
         else:
              relative_path = full_path # Fallback if path seems odd
 
@@ -89,6 +149,7 @@ Okay, here's an in-depth explanation of the steps to implement your RAG system u
         new_metadata['obsidian_links'] = links # Store the list of link targets
 
         # Create a new Document or update in place (creating new is safer)
+        # Ensure 'Document' is imported (from langchain_core.documents)
         processed_docs.append(Document(page_content=doc.page_content, metadata=new_metadata))
 
     print(f"Processed metadata for {len(processed_docs)} documents.")
@@ -98,6 +159,7 @@ Okay, here's an in-depth explanation of the steps to implement your RAG system u
     ```
     *Self-correction:* Need to import `Document` from `langchain_core.documents`.
 
+    *This import belongs at the top of `src/data_processing.py`.*
     ```python
     # Add this import at the top
     from langchain_core.documents import Document
@@ -105,21 +167,23 @@ Okay, here's an in-depth explanation of the steps to implement your RAG system u
 
 **Step 4: Split Documents into Chunks**
 
-1.  Use a text splitter (e.g., `RecursiveCharacterTextSplitter`) to break down the processed documents into smaller chunks suitable for embedding. Crucially, ensure the splitter preserves the metadata you just added. Most LangChain splitters do this by default.
+1.  Use a text splitter (e.g., `RecursiveCharacterTextSplitter`) to break down the processed documents into smaller chunks suitable for embedding. Crucially, ensure the splitter preserves the metadata you just added. Consider using chunk settings from `src/config.py`.
 
+    *This code belongs in `src/data_processing.py`, likely called after the metadata processing. Import `config` if not already done.*
     ```python
     from langchain_text_splitters import RecursiveCharacterTextSplitter
+    # Ensure 'from src import config' is present earlier in the file
 
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,  # Target size for each chunk (in characters)
-        chunk_overlap=150, # Overlap between chunks to maintain context
+        chunk_size=config.CHUNK_SIZE,  # Use from config
+        chunk_overlap=config.CHUNK_OVERLAP, # Use from config
         length_function=len,
         is_separator_regex=False, # Treat separators literally
         # Consider Markdown-specific separators if needed:
         # separators=["\n\n", "\n", " ", "", "\n# ", "\n## ", "\n### "]
     )
 
-    chunks = text_splitter.split_documents(processed_docs)
+    chunks = text_splitter.split_documents(processed_docs) # Use the processed docs list
     print(f"Split documents into {len(chunks)} chunks.")
     # Optional: Print example chunk metadata to verify
     # if chunks:
@@ -128,53 +192,71 @@ Okay, here's an in-depth explanation of the steps to implement your RAG system u
 
 **Step 5: Instantiate Embedding Model**
 
-1.  Configure the Vertex AI embedding model.
+1.  Configure the Vertex AI embedding model, using the model name specified in `src/config.py`.
 
+    *This code belongs in `src/rag_components.py`, perhaps in a function that returns the initialized model. It imports `EMBEDDING_MODEL_NAME` from `src/config.py`.*
     ```python
     from langchain_google_vertexai import VertexAIEmbeddings
+    from src import config # Import the config module
 
-    # Use a specific model version (check Vertex AI docs for latest recommended)
-    # e.g., "textembedding-gecko@003", "text-embedding-004", etc.
-    embeddings_model = VertexAIEmbeddings(model_name="text-embedding-004")
+    # Use model name from config
+    embeddings_model = VertexAIEmbeddings(model_name=config.EMBEDDING_MODEL_NAME)
     print(f"Using embedding model: {embeddings_model.model_name}")
     ```
 
 **Step 6: Store Chunks in Vector Store (ChromaDB)**
 
-1.  Initialize ChromaDB and add the embedded chunks. For persistence, specify a directory.
+1.  Initialize ChromaDB and add the embedded chunks. For persistence, use the `VECTORSTORE_PATH` specified in `src/config.py`.
 
+    *This code belongs in `src/rag_components.py`. You'll need logic here to handle both creating and loading the store. It imports `VECTORSTORE_PATH` from `src/config.py`.*
     ```python
+    import os
     from langchain_chroma import Chroma
+    from src import config # Import the config module
 
-    VECTORSTORE_PATH = "./chroma_db_obsidian"
+    # Assume 'chunks' and 'embeddings_model' are passed into this function or available in scope
 
-    # --- Option 1: Create new store (first run) ---
-    print("Creating new vector store...")
+    # --- Option 1: Create/Update store (handle logic outside this snippet) ---
+    print(f"Attempting to create/update vector store at: {config.VECTORSTORE_PATH}")
+    # Ensure the parent directory exists
+    vectorstore_dir = os.path.dirname(config.VECTORSTORE_PATH)
+    if vectorstore_dir and not os.path.exists(vectorstore_dir):
+        print(f"Creating directory: {vectorstore_dir}")
+        os.makedirs(vectorstore_dir)
+
     vectorstore = Chroma.from_documents(
         documents=chunks,
         embedding=embeddings_model,
-        persist_directory=VECTORSTORE_PATH
+        persist_directory=config.VECTORSTORE_PATH
     )
-    print(f"Vector store created at {VECTORSTORE_PATH}")
+    print(f"Vector store created/updated at {config.VECTORSTORE_PATH}")
 
-    # --- Option 2: Load existing store (subsequent runs) ---
-    # print(f"Loading existing vector store from {VECTORSTORE_PATH}...")
-    # vectorstore = Chroma(
-    #     persist_directory=VECTORSTORE_PATH,
-    #     embedding_function=embeddings_model
-    # )
-    # print("Vector store loaded.")
+    # --- Option 2: Load existing store (handle logic outside this snippet) ---
+    # print(f"Attempting to load vector store from: {config.VECTORSTORE_PATH}...")
+    # if not os.path.isdir(config.VECTORSTORE_PATH):
+    #     print(f"Vector store path not found: {config.VECTORSTORE_PATH}")
+    #     # Handle error - perhaps try to create it? Or raise an exception.
+    # else:
+    #     vectorstore = Chroma(
+    #         persist_directory=config.VECTORSTORE_PATH,
+    #         embedding_function=embeddings_model
+    #     )
+    #     print("Vector store loaded.")
     ```
-    *Note:* You'll need logic to decide whether to create or load based on whether `VECTORSTORE_PATH` exists. For simplicity, the create code is shown; comment it out and uncomment the load code for subsequent runs.
+    *Note:* The logic to decide whether to *create* or *load* the vector store should typically reside in your main application flow (e.g., in `main.py` or a dedicated setup function). It would check if `config.VECTORSTORE_PATH` exists before deciding which code path (Option 1 or Option 2) to execute.*
 
 **Step 7: Create Retriever**
 
-1.  Get a retriever interface from the vector store. `k` determines how many chunks are retrieved per query.
+1.  Get a retriever interface from the vector store. Use the `k` value from `src/config.py`.
 
+    *This code belongs in `src/rag_components.py`, likely in a function that takes the vector store as input and returns the retriever. Import `config` if not already done.*
     ```python
+    # Ensure 'from src import config' is present earlier in the file
+    # Assume 'vectorstore' is available in this scope
+
     retriever = vectorstore.as_retriever(
         search_type="similarity", # Other options: "mmr", "similarity_score_threshold"
-        search_kwargs={"k": 5}      # Retrieve top 5 most relevant chunks
+        search_kwargs={"k": config.RETRIEVER_K} # Use k from config
     )
     print(f"Retriever configured to return {retriever.search_kwargs.get('k', 'default')} chunks.")
     ```
@@ -227,15 +309,17 @@ Okay, here's an in-depth explanation of the steps to implement your RAG system u
 
 **Step 9: Instantiate LLM (Gemini via Vertex AI)**
 
-1.  Configure the Gemini model you want to use.
+1.  Configure the Gemini model you want to use, using the model name specified in `src/config.py`.
 
+    *This code belongs in `src/rag_components.py`, likely in a function that returns the initialized LLM. It imports `LLM_MODEL_NAME` from `src/config.py`.*
     ```python
     from langchain_google_vertexai import ChatVertexAI
+    from src import config # Import the config module
 
-    # Use a specific Gemini model, e.g., gemini-1.0-pro, gemini-1.5-flash-001, etc.
+    # Use model name from config
     llm = ChatVertexAI(
-        model_name="gemini-1.0-pro",
-        temperature=0.2, # Lower temperature for more factual answers
+        model_name=config.LLM_MODEL_NAME,
+        temperature=0.2, # Consider making temperature configurable too (e.g., config.LLM_TEMPERATURE)
         # You can add other parameters like max_output_tokens if needed
     )
     print(f"Using LLM: {llm.model_name}")
