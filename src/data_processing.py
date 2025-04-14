@@ -66,3 +66,21 @@ print(f"Processed metadata for {len(processed_docs)} documents.")
 # Optional: Print an example to verify metadata
 if processed_docs:
     print("Example processed doc metadata:", processed_docs[0].metadata)
+
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+# Ensure 'from src import config' is present earlier in the file
+
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=config.CHUNK_SIZE,  # Use from config
+    chunk_overlap=config.CHUNK_OVERLAP, # Use from config
+    length_function=len,
+    is_separator_regex=False, # Treat separators literally
+    # Consider Markdown-specific separators if needed:
+    # separators=["\n\n", "\n", " ", "", "\n# ", "\n## ", "\n### "]
+)
+
+chunks = text_splitter.split_documents(processed_docs) # Use the processed docs list
+print(f"Split documents into {len(chunks)} chunks.")
+# Optional: Print example chunk metadata to verify
+if chunks:
+    print("Example chunk metadata:", chunks[0].metadata)
