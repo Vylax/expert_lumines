@@ -1,7 +1,0 @@
-{
-	"nodes":[
-		{"id":"be952467cabf3353","type":"file","file":"Projets/INDUS/Debit 50k/Probleme 50k Indus.md","x":-1080,"y":-537,"width":400,"height":400},
-		{"id":"dfa327fc60073f30","x":-460,"y":-500,"width":1040,"height":1480,"color":"4","type":"file","file":"Projets/INDUS/Debit 50k/data/Tableau.md"}
-	],
-	"edges":[]
-}

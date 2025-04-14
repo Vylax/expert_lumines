@@ -1,5 +1,0 @@
-- [x] enlever la partie ftp ✅ 2025-03-06
-- [x] nettoyer les tables ✅ 2025-03-06
-- [x] deployer en prod ✅ 2025-03-06
-- [ ] update le powershell de Aicha pour faire touner mon module
-- [ ] faire tourner le script

@@ -21,7 +21,8 @@ VECTORSTORE_PATH = "./data/chroma_db_obsidian"      # Relative to project root
 # --- Model Names ---
 # Check Vertex AI documentation for recommended model versions
 EMBEDDING_MODEL_NAME = "text-embedding-004"
-LLM_MODEL_NAME = "gemini-1.0-pro"
+LLM_MODEL_NAME = "gemini-2.0-flash-lite"
+LLM_TEMPERATURE = 0.2
 
 # --- Data Processing ---
 CHUNK_SIZE = 1000

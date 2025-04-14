@@ -249,9 +249,10 @@ if not os.path.isdir(OBSIDIAN_VAULT_PATH):
 
 1.  Get a retriever interface from the vector store. Use the `k` value from `src/config.py`.
 
-    *This code belongs in `src/rag_components.py`, likely in a function that takes the vector store as input and returns the retriever. Import `config` if not already done.*
+    *This instantiation belongs in your main script (`main.py`) after you have loaded or created the `vectorstore` (from Step 6) and have access to `config.RETRIEVER_K`. It imports `config`.*
     ```python
-    # Ensure 'from src import config' is present earlier in the file
+    # In main.py, after vectorstore is available
+    # Ensure 'from src import config' is present
     # Assume 'vectorstore' is available in this scope
 
     retriever = vectorstore.as_retriever(
@@ -265,11 +266,14 @@ if not os.path.isdir(OBSIDIAN_VAULT_PATH):
 
 1.  Create the helper function to format retrieved documents (including metadata) and define the prompt template.
 
+    *The definition of `format_docs_with_metadata` and `get_prompt_template` belongs in `src/rag_components.py`. The actual prompt object is retrieved later when building the chain.*
     ```python
+    # In src/rag_components.py
     from langchain_core.prompts import ChatPromptTemplate
+    import logging # Assuming logging is set up
 
     def format_docs_with_metadata(docs):
-        """Formats retrieved documents including metadata for the prompt."""
+        \"\"\"Formats retrieved documents including metadata for the prompt.\"\"\"
         formatted_docs = []
         for i, doc in enumerate(docs):
             # Prepare metadata strings with fallbacks
@@ -281,92 +285,145 @@ if not os.path.isdir(OBSIDIAN_VAULT_PATH):
                 link_str = "None"
 
             # Assemble the formatted string for this document
-            doc_string = f"--- Context Document {i+1} ---\n"
-            doc_string += f"Source File: {relative_path}\n"
-            doc_string += f"Mentioned Links: {link_str}\n\n"
+            doc_string = f"--- Context Document {i+1} ---\\n"
+            doc_string += f"Source File: {relative_path}\\n"
+            doc_string += f"Mentioned Links: {link_str}\\n\\n"
             doc_string += doc.page_content
             formatted_docs.append(doc_string)
         # Combine all formatted document strings
-        return "\n\n".join(formatted_docs)
+        logging.debug(f"Formatted {len(docs)} documents for context.")
+        return "\\n\\n".join(formatted_docs)
 
     # Define the prompt structure for Gemini
-    template = """You are an assistant specialized in answering questions about a specific project, based *only* on the provided context documents from an Obsidian vault.
-    Your task is to synthesize the information found in the context to answer the user's question accurately.
-    Pay close attention to the source file path and mentioned internal links provided for each context document, as they might indicate relationships between notes.
-    If the context does not contain the answer, state that clearly. Do not make up information.
+    def get_prompt_template():
+        \"\"\"Creates and returns the ChatPromptTemplate.\"\"\"
+        template = \"\"\"You are an assistant specialized in answering questions about a specific project, based *only* on the provided context documents from an Obsidian vault.
+Your task is to synthesize the information found in the context to answer the user's question accurately.
+Pay close attention to the source file path and mentioned internal links provided for each context document, as they might indicate relationships between notes.
+If the context does not contain the answer, state that clearly. Do not make up information.
 
-    Context:
-    {context}
+Context:
+{context}
 
-    Question: {question}
+Question: {question}
 
-    Answer:"""
+Answer:\"\"\"
 
-    prompt = ChatPromptTemplate.from_template(template)
-    print("Prompt template created.")
-
+        prompt = ChatPromptTemplate.from_template(template)
+        logging.info("Prompt template created.")
+        return prompt
     ```
+    *Note:* The `prompt` object itself will be retrieved by calling `get_prompt_template()` in `src/chain.py` when building the chain.
 
 **Step 9: Instantiate LLM (Gemini via Vertex AI)**
 
 1.  Configure the Gemini model you want to use, using the model name specified in `src/config.py`.
 
-    *This code belongs in `src/rag_components.py`, likely in a function that returns the initialized LLM. It imports `LLM_MODEL_NAME` from `src/config.py`.*
+    *The definition of `get_llm` belongs in `src/rag_components.py`. The actual LLM object is retrieved later when building the chain. It imports `LLM_MODEL_NAME` and `GOOGLE_CLOUD_PROJECT` from `src/config.py`.*
     ```python
+    # In src/rag_components.py
     from langchain_google_vertexai import ChatVertexAI
     from src import config # Import the config module
+    import logging # Assuming logging is set up
 
-    # Use model name from config
-    llm = ChatVertexAI(
-        model_name=config.LLM_MODEL_NAME,
-        temperature=0.2, # Consider making temperature configurable too (e.g., config.LLM_TEMPERATURE)
-        # You can add other parameters like max_output_tokens if needed
-    )
-    print(f"Using LLM: {llm.model_name}")
+    def get_llm():
+        \"\"\"Initializes and returns the ChatVertexAI LLM.\"\"\"
+        try:
+            llm = ChatVertexAI(
+                model_name=config.LLM_MODEL_NAME,
+                temperature=0.2, # Consider making temperature configurable too (e.g., config.LLM_TEMPERATURE)
+                project=config.GOOGLE_CLOUD_PROJECT,
+            )
+            logging.info(f"Initialized LLM: {llm.model_name}")
+            return llm
+        except Exception as e:
+            logging.error(f"Error initializing LLM: {e}")
+            raise
     ```
+    *Note:* The `llm` object itself will be retrieved by calling `get_llm()` in `src/chain.py` when building the chain.
 
 **Step 10: Build the RAG Chain (LCEL)**
 
 1.  Combine all the components using the LangChain Expression Language (LCEL). `RunnableLambda` is used to integrate the custom formatting function.
 
+    *This code belongs in `src/chain.py`. It imports the necessary runnables, the output parser, and the required components (retriever, format function, prompt, LLM) which are passed into a function or retrieved via imports.*
     ```python
+    # In src/chain.py
     from langchain_core.runnables import RunnablePassthrough, RunnableLambda
     from langchain_core.output_parsers import StrOutputParser
+    from src.rag_components import get_prompt_template, get_llm, format_docs_with_metadata
+    import logging # Assuming logging is set up
 
-    # Define the RAG pipeline
-    rag_chain = (
-        # Step 1: Parallel execution - Retrieve context AND pass question through
-        {"context": retriever | RunnableLambda(format_docs_with_metadata), "question": RunnablePassthrough()}
-        # Step 2: Pass the dictionary {"context": ..., "question": ...} to the prompt
-        | prompt
-        # Step 3: Pass the formatted prompt to the LLM
-        | llm
-        # Step 4: Parse the LLM's message output into a string
-        | StrOutputParser()
-    )
-    print("RAG chain created.")
+    # Assume 'retriever' is passed into this function or retrieved appropriately
+    def build_rag_chain(retriever):
+        \"\"\"Builds the RAG chain using retrieved components.\"\"\"
+        logging.info("Building the RAG chain...")
+
+        # Retrieve necessary components
+        prompt = get_prompt_template()
+        llm = get_llm() # Ensure GOOGLE_CLOUD_PROJECT is set in environment
+
+        # Define the RAG pipeline using LCEL
+        rag_chain = (
+            # Step 1: Parallel execution - Retrieve context AND pass question through
+            {"context": retriever | RunnableLambda(format_docs_with_metadata), "question": RunnablePassthrough()}
+            # Step 2: Pass the dictionary {"context": ..., "question": ...} to the prompt
+            | prompt
+            # Step 3: Pass the formatted prompt to the LLM
+            | llm
+            # Step 4: Parse the LLM's message output into a string
+            | StrOutputParser()
+        )
+        logging.info("RAG chain built successfully.")
+        return rag_chain
+
+    # Example of how the chain might be built (called from main.py)
+    # if __name__ == '__main__':
+    #     # This block is for testing or direct execution context
+    #     # In a real app, main.py would likely call build_rag_chain
+    #     print("Example: Building chain (requires retriever setup)")
+    #     # You would need a dummy or real retriever here for this to run
+    #     # from langchain_community.vectorstores import Chroma
+    #     # from src.rag_components import get_embedding_model
+    #     # retriever = Chroma(...).as_retriever(...)
+    #     # try:
+    #     #     chain = build_rag_chain(retriever)
+    #     #     print("Chain built.")
+    #     # except Exception as e:
+    #     #     print(f"Error building chain: {e}")
+
     ```
 
 **Step 11: Query the System**
 
 1.  Invoke the chain with your question.
 
+    *This code belongs in your main execution script (`main.py`). It assumes the `rag_chain` has been built (by calling `build_rag_chain` from `src/chain.py`) and is available.*
     ```python
+    # In main.py
+    # Assume 'rag_chain' has been built and is available
+
     # --- Example Query ---
     question = "What is the main purpose of ModuleX and how does it connect to [[ModuleY]]?" # Example using link syntax
 
-    print(f"\nQuerying the RAG chain with: '{question}'")
-    response = rag_chain.invoke(question)
+    print(f"\\nQuerying the RAG chain with: '{question}'")
+    try:
+        response = rag_chain.invoke(question)
+        print("\\nResponse:")
+        print(response)
+    except Exception as e:
+        print(f"\\nAn error occurred during query: {e}")
 
-    print("\nResponse:")
-    print(response)
 
     # --- Another Example ---
     # question2 = "Summarize the setup process described in the 'Installation Guide.md' note."
-    # print(f"\nQuerying the RAG chain with: '{question2}'")
-    # response2 = rag_chain.invoke(question2)
-    # print("\nResponse:")
-    # print(response2)
+    # print(f"\\nQuerying the RAG chain with: '{question2}'")
+    # try:
+    #     response2 = rag_chain.invoke(question2)
+    #     print("\\nResponse:")
+    #     print(response2)
+    # except Exception as e:
+    #     print(f"\\nAn error occurred during query: {e}")
     ```
 
 This provides a comprehensive script structure. Remember to replace placeholders like `/path/to/your/obsidian/vault` and `"your-gcp-project-id"`, and manage the creation/loading of the Chroma vector store based on your runs.
