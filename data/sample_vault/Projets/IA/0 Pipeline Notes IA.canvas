@@ -1,0 +1,17 @@
+{
+	"nodes":[
+		{"id":"0729bf5dd0d674fd","type":"file","file":"Projets/IA/Réunion chatbot.md","x":-1140,"y":20,"width":400,"height":400},
+		{"id":"fc5885f8cefde156","type":"file","file":"Projets/IA/TODO cadrage IA slides.md","x":140,"y":-180,"width":340,"height":400},
+		{"id":"7987a60348590c0c","type":"file","file":"Projets/IA/Réunion Chatbot 2.md","x":-520,"y":-280,"width":400,"height":400},
+		{"id":"278c5dce72994dd2","type":"file","file":"Projets/IA/Notre cadrage projet IA.md","x":840,"y":-280,"width":400,"height":400},
+		{"id":"d8e62f4c5b7ec327","type":"file","file":"Projets/IA/ressources/Pasted image 20250213154030.png","x":-120,"y":427,"width":399,"height":175},
+		{"id":"3cf4c4b19fc8baf5","type":"file","file":"Projets/IA/ressources/Pasted image 20250213153715.png","x":310,"y":427,"width":400,"height":229}
+	],
+	"edges":[
+		{"id":"c20a9034d92b1573","fromNode":"7987a60348590c0c","fromSide":"right","toNode":"fc5885f8cefde156","toSide":"left"},
+		{"id":"e83c765e0aeda101","fromNode":"0729bf5dd0d674fd","fromSide":"right","toNode":"7987a60348590c0c","toSide":"left"},
+		{"id":"83c2490b91ce412c","fromNode":"fc5885f8cefde156","fromSide":"right","toNode":"278c5dce72994dd2","toSide":"left"},
+		{"id":"2a1a4614756fc3a2","fromNode":"fc5885f8cefde156","fromSide":"bottom","toNode":"d8e62f4c5b7ec327","toSide":"top"},
+		{"id":"b2f914f808ca23d1","fromNode":"fc5885f8cefde156","fromSide":"bottom","toNode":"3cf4c4b19fc8baf5","toSide":"top"}
+	]
+}

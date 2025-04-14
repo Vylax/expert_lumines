@@ -1,0 +1,11 @@
+- [x] passage en exploit du rapport delta tessi ✅ 2025-03-24
+- [ ] dockerization lumines bon a 95% pour luminesTP et 95% pour lumines IP/INDUS
+- [ ] problemes INDUS
+- [x] analyse probleme indus 50k ✅ 2025-03-28
+- [ ] analyse probleme SICORFE 40k
+- [x] creation de comptes lumines IP/INDUS et mise a jour de la requete ✅ 2025-03-28
+- [ ]  analyse en cours probleme pas de remonter RO veasy @Lilia cf mail avec les centres et mail de @Aicha
+- [ ] docu aicha lecture en continue
+- [ ] passage de competence d'aicha vers jordan en cours
+- [ ] aide mailan requete
+- [ ] probleme des INDUS qui a manger une grosse partie de notre semaine encore

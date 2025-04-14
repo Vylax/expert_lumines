@@ -1,0 +1,1 @@
+- [ ] aller voir au 4eme les differentes equies pour mieux comprendre le métier

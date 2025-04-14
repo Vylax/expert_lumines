@@ -1,0 +1,4 @@
+- versioning: travailler sur la prod directement: impossibilité de tester, en particulier pour la db --> au moins avoir une DB local pex docker/ de test + travail concurrent impossible
+- documentation très maigre
+- Conventions de nom de fichiers/script + absence de commentaires
+- ne pas hardcode les données sensibles -> variables d'environnements
